@@ -1,9 +1,13 @@
-use tokio_postgres::{Error, NoTls};
+use std::error::Error;
+use tokio_postgres::NoTls;
+mod app;
 mod db;
-mod ui;
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
-    db::test_query().await?;
-    Ok(())
+async fn main() -> Result<(), Box<dyn Error>> {
+    let mut app = app::App::new("library.db").await?;
+    let mut terminal = ratatui::init();
+    let result = app.run(&mut terminal).await;
+    ratatui::restore();
+    result
 }
