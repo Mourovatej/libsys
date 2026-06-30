@@ -1,18 +1,6 @@
 use std::path::Path;
 
-use tokio_postgres::{Error, NoTls};
 use turso::Builder;
-pub async fn test_query() -> Result<Vec<tokio_postgres::Row>, Error> {
-    let (client, connection) =
-        tokio_postgres::connect("host=localhost dbname=libsys user=libsys_user", NoTls).await?;
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            eprintln!("connection error: {}", e);
-        }
-    });
-    let rows = client.query("SELECT * FROM library", &[]).await?;
-    Ok(rows)
-}
 
 pub async fn create_or_open_db(path: &str) -> turso::Result<(turso::Database, turso::Connection)> {
     let is_new = !Path::new(path).exists();

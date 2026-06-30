@@ -1,12 +1,12 @@
 use crossterm::event::poll;
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::style::Modifier;
-use ratatui::widgets::{Row, Table, TableState};
+use ratatui::widgets::{Borders, Row, Table, TableState};
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Constraint, Direction, Layout},
     style::Style,
-    widgets::{Block, Borders, Clear},
+    widgets::{Block, Clear},
 };
 use ratatui_textarea::TextArea;
 use std::error::Error;
@@ -25,174 +25,62 @@ pub struct Book {
     pub isbn: Option<String>,
     pub tags: Option<String>,
 }
-#[derive(PartialEq, Default, Clone, Copy)]
-pub enum Field {
-    #[default]
-    Title,
-    Author,
-    Tags,
-    PublicationYear,
-    Isbn,
-    Location,
-}
 
-pub enum Screen {
-    Search,
-    Table,
-}
-
-#[derive(Default)]
-pub struct SearchForm<'a> {
-    pub author: TextArea<'a>,
-    pub title: TextArea<'a>,
-    pub publication_year: TextArea<'a>,
-    pub tags: TextArea<'a>,
-    pub isbn: TextArea<'a>,
-    pub location: TextArea<'a>,
-    pub focused: Field,
-    pub dimmed: bool,
-}
-
-impl<'a> SearchForm<'a> {
-    pub fn focus_next(&mut self) {
-        self.focused = match self.focused {
-            Field::Title => Field::Author,
-            Field::Author => Field::Tags,
-            Field::Tags => Field::PublicationYear,
-            Field::PublicationYear => Field::Isbn,
-            Field::Isbn => Field::Location,
-            Field::Location => Field::Title,
-        }
-    }
-    pub fn focus_previous(&mut self) {
-        self.focused = match self.focused {
-            Field::Title => Field::Location,
-            Field::Location => Field::Isbn,
-            Field::Isbn => Field::PublicationYear,
-            Field::PublicationYear => Field::Tags,
-            Field::Tags => Field::Author,
-            Field::Author => Field::Title,
-        }
-    }
-
-    pub fn focused_textarea_mut(&mut self) -> &mut TextArea<'a> {
-        match self.focused {
-            Field::Title => &mut self.title,
-            Field::Author => &mut self.author,
-            Field::Tags => &mut self.tags,
-            Field::PublicationYear => &mut self.publication_year,
-            Field::Isbn => &mut self.isbn,
-            Field::Location => &mut self.location,
-        }
-    }
-}
-
-pub fn render_book_list(
-    frame: &mut Frame,
-    search_form: &mut SearchForm,
-    items: &mut [Book],
-    table_state: &mut TableState,
-) {
+pub fn render_book_list(frame: &mut Frame, items: &mut [Book], table_state: &mut TableState) {
     let vertical_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(95), Constraint::Percentage(5)].as_ref())
+        .constraints([Constraint::Percentage(99), Constraint::Percentage(1)].as_ref())
         .split(frame.area());
 
-    let main_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(20), Constraint::Percentage(80)].as_ref())
-        .split(vertical_chunks[0]);
-
-    let form_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(vec![
-            Constraint::Ratio(1, 6),
-            Constraint::Ratio(1, 6),
-            Constraint::Ratio(1, 6),
-            Constraint::Ratio(1, 6),
-            Constraint::Ratio(1, 6),
-            Constraint::Ratio(1, 6),
-        ])
-        .split(main_chunks[0]);
-
-    let fields: [(Field, &mut TextArea, &str); 6] = [
-        (Field::Title, &mut search_form.title, "Title"),
-        (Field::Author, &mut search_form.author, "Author"),
-        (Field::Tags, &mut search_form.tags, "Tags"),
-        (
-            Field::PublicationYear,
-            &mut search_form.publication_year,
-            "Publication Year",
-        ),
-        (Field::Isbn, &mut search_form.isbn, "ISBN"),
-        (Field::Location, &mut search_form.location, "Location"),
-    ];
-
-    let focused = search_form.focused;
-
-    for (i, (field, textarea, label)) in fields.into_iter().enumerate() {
-        let is_focused = field == focused;
-
-        let block = Block::default().borders(Borders::ALL).title(label).style(
-            match (is_focused, search_form.dimmed) {
-                (true, true) => Style::default().add_modifier(Modifier::DIM),
-                (true, false) => Style::default().fg(ratatui::style::Color::Green),
-                (false, true) => Style::default().add_modifier(Modifier::DIM),
-                (false, false) => Style::default(),
-            },
-        );
-
-        textarea.set_block(block);
-        frame.render_widget(&*textarea, form_chunks[i]);
-
-        let rows: Vec<Row> = items
-            .iter()
-            .map(|book| {
-                Row::new(vec![
-                    book.id.clone().to_string(),
-                    book.title.clone().unwrap_or_default(),
-                    book.author.clone().unwrap_or_default(),
-                    book.publication_year.unwrap_or_default().to_string(),
-                    book.location.clone().unwrap_or_default(),
-                    book.return_date.clone().unwrap_or_default(),
-                    book.isbn.clone().unwrap_or_default(),
-                    book.notes.clone().unwrap_or_default(),
-                    book.tags.clone().unwrap_or_default(),
-                ])
-            })
-            .collect();
-        let table = Table::new(
-            rows,
-            [
-                Constraint::Percentage(5),
-                Constraint::Percentage(17),
-                Constraint::Percentage(17),
-                Constraint::Percentage(5),
-                Constraint::Percentage(11),
-                Constraint::Percentage(11),
-                Constraint::Percentage(11),
-                Constraint::Percentage(11),
-                Constraint::Percentage(11),
-            ],
-        )
-        .header(
+    let rows: Vec<Row> = items
+        .iter()
+        .map(|book| {
             Row::new(vec![
-                "id",
-                "Title",
-                "Author",
-                "Pub Year",
-                "Location",
-                "Return Date",
-                "ISBN",
-                "Notes",
-                "Tags",
+                book.id.clone().to_string(),
+                book.title.clone().unwrap_or_default(),
+                book.author.clone().unwrap_or_default(),
+                book.publication_year.unwrap_or_default().to_string(),
+                book.location.clone().unwrap_or_default(),
+                book.return_date.clone().unwrap_or_default(),
+                book.isbn.clone().unwrap_or_default(),
+                book.notes.clone().unwrap_or_default(),
+                book.tags.clone().unwrap_or_default(),
             ])
-            .style(Style::default().add_modifier(Modifier::UNDERLINED | Modifier::BOLD)),
-        )
-        .row_highlight_style(Style::default().bold())
-        .highlight_symbol("> ");
-        frame.render_stateful_widget(table, main_chunks[1], table_state);
-    }
+        })
+        .collect();
+    let table_block = Block::default().borders(Borders::ALL);
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(5),
+            Constraint::Percentage(17),
+            Constraint::Percentage(17),
+            Constraint::Length(10),
+            Constraint::Length(12),
+            Constraint::Length(14),
+            Constraint::Length(15),
+            Constraint::Length(30),
+            Constraint::Fill(1),
+        ],
+    )
+    .block(table_block)
+    .header(
+        Row::new(vec![
+            "id",
+            "Title",
+            "Author",
+            "Pub Year",
+            "Location",
+            "Return Date",
+            "ISBN",
+            "Notes",
+            "Tags",
+        ])
+        .style(Style::default().add_modifier(Modifier::UNDERLINED | Modifier::BOLD)),
+    )
+    .row_highlight_style(Style::default().bold())
+    .highlight_symbol("> ");
+    frame.render_stateful_widget(table, vertical_chunks[0], table_state);
 }
 
 pub fn search_popup(frame: &mut Frame, search_line: &mut TextArea) {
@@ -206,13 +94,11 @@ pub fn search_popup(frame: &mut Frame, search_line: &mut TextArea) {
 }
 
 pub struct App<'a> {
-    search_form: SearchForm<'a>,
     search_line: TextArea<'a>,
     search_popup: bool,
     items: Vec<Book>,
     item_table_state: TableState,
     should_quit: bool,
-    focused_screen: Screen,
     db: turso::Database,
     conn: turso::Connection,
 }
@@ -221,13 +107,11 @@ impl App<'_> {
     pub async fn new(path: &str) -> turso::Result<Self> {
         let (db, conn) = db::create_or_open_db(path).await?;
         Ok(Self {
-            search_form: SearchForm::default(),
             search_line: TextArea::default(),
             search_popup: false,
             item_table_state: TableState::default(),
             items: Vec::new(),
             should_quit: false,
-            focused_screen: Screen::Search,
             db,
             conn,
         })
@@ -237,14 +121,10 @@ impl App<'_> {
         //App::insert_sample_data(&self.conn).await?;
         let result = Self::query_whole(&self.conn).await?;
         self.items = Self::parse_result(result).await?;
+        self.item_table_state.select_first();
         while !self.should_quit {
             terminal.draw(|frame| {
-                render_book_list(
-                    frame,
-                    &mut self.search_form,
-                    &mut self.items,
-                    &mut self.item_table_state,
-                );
+                render_book_list(frame, &mut self.items, &mut self.item_table_state);
                 if self.search_popup {
                     search_popup(frame, &mut self.search_line);
                 }
@@ -262,12 +142,7 @@ impl App<'_> {
             match event::read()? {
                 Event::Resize(_, _) => {
                     terminal.draw(|frame| {
-                        render_book_list(
-                            frame,
-                            &mut self.search_form,
-                            &mut self.items,
-                            &mut self.item_table_state,
-                        );
+                        render_book_list(frame, &mut self.items, &mut self.item_table_state);
                     })?;
                 }
                 Event::Key(key) => {
@@ -280,6 +155,8 @@ impl App<'_> {
                                 )
                                 .await?;
                                 self.items = App::parse_result(result).await?;
+                                self.item_table_state.select_first();
+                                self.search_popup = false;
                             }
                             _ => {
                                 self.search_line.input(key);
@@ -289,36 +166,20 @@ impl App<'_> {
 
                     match key.code {
                         KeyCode::Esc => self.should_quit = true,
-                        _ => {}
-                    }
-                    match self.focused_screen {
-                        Screen::Search => match key.code {
-                            KeyCode::Up => self.search_form.focus_previous(),
-                            KeyCode::Down => self.search_form.focus_next(),
-                            KeyCode::Tab => {
-                                self.focused_screen = Screen::Table;
-                                self.search_form.dimmed = true;
-                            }
-                            _ => {
-                                self.search_form.focused_textarea_mut().input(key);
-                            }
-                        },
-                        Screen::Table => match key.code {
-                            KeyCode::Up => self.item_table_state.select_previous(),
-                            KeyCode::Down => self.item_table_state.select_next(),
-                            KeyCode::Tab => {
-                                self.focused_screen = Screen::Search;
-                                self.search_form.dimmed = false;
-                            }
-                            KeyCode::Char('/') => {
-                                if self.search_popup {
-                                    self.search_line.clear();
-                                }
-                                self.search_popup = !self.search_popup;
-                            }
 
-                            _ => {}
-                        },
+                        KeyCode::Up => self.item_table_state.select_previous(),
+                        KeyCode::Down => self.item_table_state.select_next(),
+                        KeyCode::Char('/') => {
+                            if self.search_popup {
+                                self.search_line.clear();
+                            }
+                            self.search_popup = !self.search_popup;
+                        }
+                        KeyCode::Char('r') => {
+                            let result = App::query_whole(&self.conn).await?;
+                            self.items = App::parse_result(result).await?;
+                        }
+                        _ => {}
                     }
                 }
                 _ => {}

@@ -1,5 +1,4 @@
 use std::error::Error;
-use tokio_postgres::NoTls;
 mod app;
 mod db;
 
