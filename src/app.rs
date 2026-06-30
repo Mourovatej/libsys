@@ -6,7 +6,7 @@ use ratatui::{
     DefaultTerminal, Frame,
     layout::{Constraint, Direction, Layout},
     style::Style,
-    widgets::{Block, Borders},
+    widgets::{Block, Borders, Clear},
 };
 use ratatui_textarea::TextArea;
 use std::error::Error;
@@ -195,8 +195,20 @@ pub fn render_book_list(
     }
 }
 
+pub fn search_popup(frame: &mut Frame, search_line: &mut TextArea) {
+    let popup_block = Block::bordered().title("Search");
+    let centered_area = frame
+        .area()
+        .centered(Constraint::Percentage(50), Constraint::Percentage(10));
+    search_line.set_block(popup_block);
+    frame.render_widget(Clear, centered_area);
+    frame.render_widget(&*search_line, centered_area);
+}
+
 pub struct App<'a> {
     search_form: SearchForm<'a>,
+    search_line: TextArea<'a>,
+    search_popup: bool,
     items: Vec<Book>,
     item_table_state: TableState,
     should_quit: bool,
@@ -210,6 +222,8 @@ impl App<'_> {
         let (db, conn) = db::create_or_open_db(path).await?;
         Ok(Self {
             search_form: SearchForm::default(),
+            search_line: TextArea::default(),
+            search_popup: false,
             item_table_state: TableState::default(),
             items: Vec::new(),
             should_quit: false,
@@ -220,7 +234,7 @@ impl App<'_> {
     }
 
     pub async fn run(&mut self, terminal: &mut DefaultTerminal) -> Result<(), Box<dyn Error>> {
-        App::insert_sample_data(&self.conn).await?;
+        //App::insert_sample_data(&self.conn).await?;
         let result = Self::query_whole(&self.conn).await?;
         self.items = Self::parse_result(result).await?;
         while !self.should_quit {
@@ -231,6 +245,9 @@ impl App<'_> {
                     &mut self.items,
                     &mut self.item_table_state,
                 );
+                if self.search_popup {
+                    search_popup(frame, &mut self.search_line);
+                }
             })?;
             self.handle_events(terminal).await?;
         }
@@ -254,6 +271,22 @@ impl App<'_> {
                     })?;
                 }
                 Event::Key(key) => {
+                    if self.search_popup {
+                        match key.code {
+                            KeyCode::Enter => {
+                                let result = App::search(
+                                    &self.conn,
+                                    &self.search_line.lines().join(" ").to_string(),
+                                )
+                                .await?;
+                                self.items = App::parse_result(result).await?;
+                            }
+                            _ => {
+                                self.search_line.input(key);
+                            }
+                        }
+                    }
+
                     match key.code {
                         KeyCode::Esc => self.should_quit = true,
                         _ => {}
@@ -278,8 +311,10 @@ impl App<'_> {
                                 self.search_form.dimmed = false;
                             }
                             KeyCode::Char('/') => {
-                                let result = App::search(&self.conn, "Lee").await?;
-                                self.items = App::parse_result(result).await?;
+                                if self.search_popup {
+                                    self.search_line.clear();
+                                }
+                                self.search_popup = !self.search_popup;
                             }
 
                             _ => {}
