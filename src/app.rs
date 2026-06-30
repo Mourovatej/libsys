@@ -87,7 +87,7 @@ pub fn search_popup(frame: &mut Frame, search_line: &mut TextArea) {
     let popup_block = Block::bordered().title("Search");
     let centered_area = frame
         .area()
-        .centered(Constraint::Percentage(50), Constraint::Percentage(10));
+        .centered(Constraint::Percentage(50), Constraint::Length(3));
     search_line.set_block(popup_block);
     frame.render_widget(Clear, centered_area);
     frame.render_widget(&*search_line, centered_area);
