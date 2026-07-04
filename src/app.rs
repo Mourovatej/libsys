@@ -14,6 +14,89 @@ use std::time::Duration;
 
 use crate::db;
 
+#[derive(PartialEq, Default, Clone, Copy)]
+pub enum Field {
+    #[default]
+    Title,
+    Author,
+    Tags,
+    PublicationYear,
+    Isbn,
+    Location,
+    ReturnDate,
+    Notes,
+}
+
+#[derive(Default)]
+pub enum Screen {
+    #[default]
+    Table,
+    Insert,
+    Search,
+}
+
+#[derive(Default)]
+pub struct InsertForm<'a> {
+    pub author: TextArea<'a>,
+    pub title: TextArea<'a>,
+    pub publication_year: TextArea<'a>,
+    pub tags: TextArea<'a>,
+    pub isbn: TextArea<'a>,
+    pub location: TextArea<'a>,
+    pub notes: TextArea<'a>,
+    pub return_date: TextArea<'a>,
+    pub focused: Field,
+}
+
+impl<'a> InsertForm<'a> {
+    pub fn focus_next(&mut self) {
+        self.focused = match self.focused {
+            Field::Title => Field::Author,
+            Field::Author => Field::Tags,
+            Field::Tags => Field::PublicationYear,
+            Field::PublicationYear => Field::Isbn,
+            Field::Isbn => Field::Location,
+            Field::Location => Field::ReturnDate,
+            Field::ReturnDate => Field::Notes,
+            Field::Notes => Field::Title,
+        }
+    }
+    pub fn focus_previous(&mut self) {
+        self.focused = match self.focused {
+            Field::Title => Field::Notes,
+            Field::Notes => Field::ReturnDate,
+            Field::ReturnDate => Field::Location,
+            Field::Location => Field::Isbn,
+            Field::Isbn => Field::PublicationYear,
+            Field::PublicationYear => Field::Tags,
+            Field::Tags => Field::Author,
+            Field::Author => Field::Title,
+        }
+    }
+
+    pub fn focused_textarea_mut(&mut self) -> &mut TextArea<'a> {
+        match self.focused {
+            Field::Title => &mut self.title,
+            Field::Author => &mut self.author,
+            Field::Tags => &mut self.tags,
+            Field::PublicationYear => &mut self.publication_year,
+            Field::Isbn => &mut self.isbn,
+            Field::Location => &mut self.location,
+            Field::Notes => &mut self.notes,
+            Field::ReturnDate => &mut self.return_date,
+        }
+    }
+    pub fn clear_all(&mut self) {
+        self.title.clear();
+        self.author.clear();
+        self.publication_year.clear();
+        self.return_date.clear();
+        self.location.clear();
+        self.notes.clear();
+        self.isbn.clear();
+        self.tags.clear();
+    }
+}
 pub struct Book {
     pub id: u32,
     pub author: Option<String>,
@@ -93,9 +176,69 @@ pub fn search_popup(frame: &mut Frame, search_line: &mut TextArea) {
     frame.render_widget(&*search_line, centered_area);
 }
 
+pub fn insert_popup(frame: &mut Frame, insert_form: &mut InsertForm) {
+    let popup_block = Block::bordered().title("Insert");
+    let centered_area = frame
+        .area()
+        .centered(Constraint::Percentage(50), Constraint::Percentage(70));
+
+    let form_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(vec![
+            Constraint::Ratio(1, 8),
+            Constraint::Ratio(1, 8),
+            Constraint::Ratio(1, 8),
+            Constraint::Ratio(1, 8),
+            Constraint::Ratio(1, 8),
+            Constraint::Ratio(1, 8),
+            Constraint::Ratio(1, 8),
+            Constraint::Ratio(1, 8),
+        ])
+        .split(centered_area);
+
+    let fields: [(Field, &mut TextArea, &str); 8] = [
+        (Field::Title, &mut insert_form.title, "Title"),
+        (Field::Author, &mut insert_form.author, "Author"),
+        (Field::Tags, &mut insert_form.tags, "Tags"),
+        (
+            Field::PublicationYear,
+            &mut insert_form.publication_year,
+            "Publication Year",
+        ),
+        (Field::Isbn, &mut insert_form.isbn, "ISBN"),
+        (Field::Location, &mut insert_form.location, "Location"),
+        (Field::Notes, &mut insert_form.notes, "Notes"),
+        (
+            Field::ReturnDate,
+            &mut insert_form.return_date,
+            "Return Date",
+        ),
+    ];
+
+    frame.render_widget(Clear, centered_area);
+    let focused = insert_form.focused;
+
+    for (i, (field, textarea, label)) in fields.into_iter().enumerate() {
+        let is_focused = field == focused;
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(label)
+            .style(if is_focused {
+                Style::default().fg(ratatui::style::Color::Green)
+            } else {
+                Style::default()
+            });
+
+        textarea.set_block(block);
+        frame.render_widget(&*textarea, form_chunks[i]);
+    }
+}
+
 pub struct App<'a> {
+    screen: Screen,
     search_line: TextArea<'a>,
-    search_popup: bool,
+    insert_form: InsertForm<'a>,
     items: Vec<Book>,
     item_table_state: TableState,
     should_quit: bool,
@@ -107,8 +250,9 @@ impl App<'_> {
     pub async fn new(path: &str) -> turso::Result<Self> {
         let (db, conn) = db::create_or_open_db(path).await?;
         Ok(Self {
+            screen: Screen::default(),
             search_line: TextArea::default(),
-            search_popup: false,
+            insert_form: InsertForm::default(),
             item_table_state: TableState::default(),
             items: Vec::new(),
             should_quit: false,
@@ -123,11 +267,13 @@ impl App<'_> {
         self.items = Self::parse_result(result).await?;
         self.item_table_state.select_first();
         while !self.should_quit {
-            terminal.draw(|frame| {
-                render_book_list(frame, &mut self.items, &mut self.item_table_state);
-                if self.search_popup {
-                    search_popup(frame, &mut self.search_line);
+            terminal.draw(|frame| match self.screen {
+                Screen::Table => {
+                    render_book_list(frame, &mut self.items, &mut self.item_table_state)
                 }
+
+                Screen::Insert => insert_popup(frame, &mut self.insert_form),
+                Screen::Search => search_popup(frame, &mut self.search_line),
             })?;
             self.handle_events(terminal).await?;
         }
@@ -145,48 +291,101 @@ impl App<'_> {
                         render_book_list(frame, &mut self.items, &mut self.item_table_state);
                     })?;
                 }
-                Event::Key(key) => {
-                    if self.search_popup {
-                        match key.code {
-                            KeyCode::Enter => {
-                                let result = App::search(
-                                    &self.conn,
-                                    &self.search_line.lines().join(" ").to_string(),
-                                )
-                                .await?;
-                                self.items = App::parse_result(result).await?;
-                                self.item_table_state.select_first();
-                                self.search_popup = false;
-                            }
-                            _ => {
-                                self.search_line.input(key);
-                            }
-                        }
-                    }
-
-                    match key.code {
+                Event::Key(key) => match self.screen {
+                    Screen::Table => match key.code {
                         KeyCode::Esc => self.should_quit = true,
-
+                        KeyCode::Char('n') => {
+                            self.insert_form.clear_all();
+                            self.screen = Screen::Insert;
+                        }
                         KeyCode::Up => self.item_table_state.select_previous(),
                         KeyCode::Down => self.item_table_state.select_next(),
                         KeyCode::Char('/') => {
-                            if self.search_popup {
-                                self.search_line.clear();
-                            }
-                            self.search_popup = !self.search_popup;
+                            self.search_line.clear();
+                            self.screen = Screen::Search;
                         }
                         KeyCode::Char('r') => {
                             let result = App::query_whole(&self.conn).await?;
                             self.items = App::parse_result(result).await?;
                         }
+                        KeyCode::Char('x') => {
+                            self.conn
+                                .execute(
+                                    r#"DELETE FROM library WHERE id = ?1"#,
+                                    [self.items[self.item_table_state.selected().unwrap()]
+                                        .id
+                                        .clone()
+                                        .to_string()],
+                                )
+                                .await?;
+                            let result = App::query_whole(&self.conn).await?;
+                            self.items = App::parse_result(result).await?;
+                        }
                         _ => {}
-                    }
-                }
+                    },
+                    Screen::Search => match key.code {
+                        KeyCode::Enter => {
+                            let result = App::search(
+                                &self.conn,
+                                &self.search_line.lines().join(" ").to_string(),
+                            )
+                            .await?;
+                            self.items = App::parse_result(result).await?;
+                            self.item_table_state.select_first();
+                            self.screen = Screen::Table;
+                        }
+                        KeyCode::Esc => self.screen = Screen::Table,
+                        _ => {
+                            self.search_line.input(key);
+                        }
+                    },
+                    Screen::Insert => match key.code {
+                        KeyCode::Up => self.insert_form.focus_previous(),
+                        KeyCode::Down => self.insert_form.focus_next(),
+                        KeyCode::Tab => self.insert_form.focus_next(),
+                        KeyCode::Esc => self.screen = Screen::Table,
+                        KeyCode::Enter => {
+                            let book = Book {
+                                id: 0,
+                                author: Some(self.insert_form.author.lines().join(" ").to_string()),
+                                title: Some(self.insert_form.title.lines().join(" ").to_string()),
+                                publication_year: Some(
+                                    self.insert_form
+                                        .publication_year
+                                        .lines()
+                                        .join(" ")
+                                        .parse()?,
+                                ),
+                                tags: Some(self.insert_form.tags.lines().join(" ").to_string()),
+                                return_date: Some(
+                                    self.insert_form.return_date.lines().join(" ").to_string(),
+                                ),
+                                location: Some(
+                                    self.insert_form.location.lines().join(" ").to_string(),
+                                ),
+                                isbn: Some(self.insert_form.isbn.lines().join(" ").to_string()),
+                                notes: Some(self.insert_form.notes.lines().join(" ").to_string()),
+                            };
+
+                            self.conn.execute(
+                                r#"INSERT INTO library (author, title, publication_year, tags, return_date, location, isbn, notes)
+                                    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"#, (book.author, book.title, book.publication_year, book.tags, book.return_date, book.location, book.isbn, book.notes)
+                            ).await?;
+                            self.screen = Screen::Table;
+                            let result = App::query_whole(&self.conn).await?;
+                            self.items = App::parse_result(result).await?;
+                        }
+                        _ => {
+                            self.insert_form.focused_textarea_mut().input(key);
+                        }
+                    },
+                },
                 _ => {}
             }
         }
         Ok(())
     }
+
     pub async fn insert_sample_data(conn: &turso::Connection) -> turso::Result<()> {
         let books = vec![
             (
