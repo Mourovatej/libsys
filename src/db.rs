@@ -5,7 +5,10 @@ use turso::Builder;
 pub async fn create_or_open_db(path: &str) -> turso::Result<(turso::Database, turso::Connection)> {
     let is_new = !Path::new(path).exists();
 
-    let db = Builder::new_local(path).build().await?;
+    let db = Builder::new_local(path)
+        .experimental_index_method(true)
+        .build()
+        .await?;
     let conn = db.connect()?;
     conn.execute(
         r#"CREATE TABLE IF NOT EXISTS library (

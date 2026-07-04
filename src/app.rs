@@ -436,9 +436,9 @@ impl App<'_> {
                             let result = App::query_whole(&self.conn).await?;
                             self.items = App::parse_result(result).await?;
                         }
-                        KeyCode::Enter => {
+                        KeyCode::Enter if !self.items.is_empty() => {
                             self.insert_form.clear_all();
-                            if let Some(idx) = self.item_table_state.selected() {
+                            if let Some(idx) = self.item_table_state.selected()  {
                                 let book = &self.items[idx];
                                 self.insert_form
                                     .title
@@ -468,6 +468,7 @@ impl App<'_> {
                                     .insert_str(book.notes.clone().unwrap_or_default());
                             }
                             self.screen = Screen::Update;
+                            
                         }
                         _ => {}
                     },
@@ -560,7 +561,7 @@ impl App<'_> {
                                 (
                                     book.author,
                                     book.title,
-                                    book.publication_year,
+                                    book.publication_year, 
                                     book.tags,
                                     book.return_date,
                                     book.location,
@@ -575,6 +576,7 @@ impl App<'_> {
                             self.screen = Screen::Table;
                             let result = App::query_whole(&self.conn).await?;
                             self.items = App::parse_result(result).await?;
+                            
                         }
                         _ => {
                             self.insert_form.focused_textarea_mut().input(key);
