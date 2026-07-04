@@ -33,6 +33,7 @@ pub enum Screen {
     Table,
     Insert,
     Search,
+    Update,
 }
 
 #[derive(Default)]
@@ -136,8 +137,8 @@ pub fn render_book_list(frame: &mut Frame, items: &mut [Book], table_state: &mut
         rows,
         [
             Constraint::Length(5),
-            Constraint::Percentage(17),
-            Constraint::Percentage(17),
+            Constraint::Percentage(24),
+            Constraint::Percentage(10),
             Constraint::Length(10),
             Constraint::Length(12),
             Constraint::Length(14),
@@ -207,12 +208,12 @@ pub fn insert_popup(frame: &mut Frame, insert_form: &mut InsertForm) {
         ),
         (Field::Isbn, &mut insert_form.isbn, "ISBN"),
         (Field::Location, &mut insert_form.location, "Location"),
-        (Field::Notes, &mut insert_form.notes, "Notes"),
         (
             Field::ReturnDate,
             &mut insert_form.return_date,
             "Return Date",
         ),
+        (Field::Notes, &mut insert_form.notes, "Notes"),
     ];
 
     frame.render_widget(Clear, centered_area);
@@ -230,6 +231,119 @@ pub fn insert_popup(frame: &mut Frame, insert_form: &mut InsertForm) {
                 Style::default()
             });
 
+        textarea.set_block(block);
+        frame.render_widget(&*textarea, form_chunks[i]);
+    }
+}
+pub fn update_popup(
+    frame: &mut Frame,
+    insert_form: &mut InsertForm,
+    items: &mut [Book],
+    table_state: &mut TableState,
+) {
+    let popup_block = Block::bordered().title("Insert");
+    let centered_area = frame
+        .area()
+        .centered(Constraint::Percentage(50), Constraint::Percentage(70));
+
+    let form_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(vec![
+            Constraint::Ratio(1, 8),
+            Constraint::Ratio(1, 8),
+            Constraint::Ratio(1, 8),
+            Constraint::Ratio(1, 8),
+            Constraint::Ratio(1, 8),
+            Constraint::Ratio(1, 8),
+            Constraint::Ratio(1, 8),
+            Constraint::Ratio(1, 8),
+        ])
+        .split(centered_area);
+
+    let fields: [(Field, &mut TextArea, &str, &str); 8] = [
+        (
+            Field::Title,
+            &mut insert_form.title,
+            &items[table_state.selected().unwrap()]
+                .title
+                .clone()
+                .unwrap(),
+            "Title",
+        ),
+        (
+            Field::Author,
+            &mut insert_form.author,
+            &items[table_state.selected().unwrap()]
+                .author
+                .clone()
+                .unwrap(),
+            "Author",
+        ),
+        (
+            Field::Tags,
+            &mut insert_form.tags,
+            &items[table_state.selected().unwrap()].tags.clone().unwrap(),
+            "Tags",
+        ),
+        (
+            Field::PublicationYear,
+            &mut insert_form.publication_year,
+            &items[table_state.selected().unwrap()]
+                .publication_year
+                .unwrap()
+                .to_string(),
+            "Publication Year",
+        ),
+        (
+            Field::Isbn,
+            &mut insert_form.isbn,
+            &items[table_state.selected().unwrap()].isbn.clone().unwrap(),
+            "ISBN",
+        ),
+        (
+            Field::Location,
+            &mut insert_form.location,
+            &items[table_state.selected().unwrap()]
+                .location
+                .clone()
+                .unwrap(),
+            "Location",
+        ),
+        (
+            Field::ReturnDate,
+            &mut insert_form.return_date,
+            &items[table_state.selected().unwrap()]
+                .return_date
+                .clone()
+                .unwrap(),
+            "Return Date",
+        ),
+        (
+            Field::Notes,
+            &mut insert_form.notes,
+            &items[table_state.selected().unwrap()]
+                .notes
+                .clone()
+                .unwrap(),
+            "Notes",
+        ),
+    ];
+
+    frame.render_widget(Clear, centered_area);
+    let focused = insert_form.focused;
+
+    for (i, (field, textarea, to_insert, label)) in fields.into_iter().enumerate() {
+        let is_focused = field == focused;
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(label)
+            .style(if is_focused {
+                Style::default().fg(ratatui::style::Color::Green)
+            } else {
+                Style::default()
+            });
+        textarea.insert_str(to_insert);
         textarea.set_block(block);
         frame.render_widget(&*textarea, form_chunks[i]);
     }
@@ -274,6 +388,7 @@ impl App<'_> {
 
                 Screen::Insert => insert_popup(frame, &mut self.insert_form),
                 Screen::Search => search_popup(frame, &mut self.search_line),
+                Screen::Update => insert_popup(frame, &mut self.insert_form),
             })?;
             self.handle_events(terminal).await?;
         }
@@ -320,6 +435,39 @@ impl App<'_> {
                                 .await?;
                             let result = App::query_whole(&self.conn).await?;
                             self.items = App::parse_result(result).await?;
+                        }
+                        KeyCode::Enter => {
+                            self.insert_form.clear_all();
+                            if let Some(idx) = self.item_table_state.selected() {
+                                let book = &self.items[idx];
+                                self.insert_form
+                                    .title
+                                    .insert_str(book.title.clone().unwrap_or_default());
+                                self.insert_form
+                                    .author
+                                    .insert_str(book.author.clone().unwrap_or_default());
+                                self.insert_form
+                                    .tags
+                                    .insert_str(book.tags.clone().unwrap_or_default());
+                                self.insert_form.publication_year.insert_str(
+                                    book.publication_year
+                                        .map(|y| y.to_string())
+                                        .unwrap_or_default(),
+                                );
+                                self.insert_form
+                                    .isbn
+                                    .insert_str(book.isbn.clone().unwrap_or_default());
+                                self.insert_form
+                                    .location
+                                    .insert_str(book.location.clone().unwrap_or_default());
+                                self.insert_form
+                                    .return_date
+                                    .insert_str(book.return_date.clone().unwrap_or_default());
+                                self.insert_form
+                                    .notes
+                                    .insert_str(book.notes.clone().unwrap_or_default());
+                            }
+                            self.screen = Screen::Update;
                         }
                         _ => {}
                     },
@@ -370,6 +518,59 @@ impl App<'_> {
                             self.conn.execute(
                                 r#"INSERT INTO library (author, title, publication_year, tags, return_date, location, isbn, notes)
                                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"#, (book.author, book.title, book.publication_year, book.tags, book.return_date, book.location, book.isbn, book.notes)
+                            ).await?;
+                            self.screen = Screen::Table;
+                            let result = App::query_whole(&self.conn).await?;
+                            self.items = App::parse_result(result).await?;
+                        }
+                        _ => {
+                            self.insert_form.focused_textarea_mut().input(key);
+                        }
+                    },
+                    Screen::Update => match key.code {
+                        KeyCode::Up => self.insert_form.focus_previous(),
+                        KeyCode::Down => self.insert_form.focus_next(),
+                        KeyCode::Tab => self.insert_form.focus_next(),
+                        KeyCode::Esc => self.screen = Screen::Table,
+                        KeyCode::Enter => {
+                            let book = Book {
+                                id: 0,
+                                author: Some(self.insert_form.author.lines().join(" ").to_string()),
+                                title: Some(self.insert_form.title.lines().join(" ").to_string()),
+                                publication_year: Some(
+                                    self.insert_form
+                                        .publication_year
+                                        .lines()
+                                        .join(" ")
+                                        .parse()?,
+                                ),
+                                tags: Some(self.insert_form.tags.lines().join(" ").to_string()),
+                                return_date: Some(
+                                    self.insert_form.return_date.lines().join(" ").to_string(),
+                                ),
+                                location: Some(
+                                    self.insert_form.location.lines().join(" ").to_string(),
+                                ),
+                                isbn: Some(self.insert_form.isbn.lines().join(" ").to_string()),
+                                notes: Some(self.insert_form.notes.lines().join(" ").to_string()),
+                            };
+                            self.conn.execute(
+                                r#"UPDATE library SET author = ?1, title = ?2, publication_year = ?3, tags = ?4, return_date = ?5, location = ?6, isbn = ?7, notes = ?8
+                                WHERE id = ?9"#,
+                                (
+                                    book.author,
+                                    book.title,
+                                    book.publication_year,
+                                    book.tags,
+                                    book.return_date,
+                                    book.location,
+                                    book.isbn,
+                                    book.notes,
+                                    self.items[self.item_table_state.selected().unwrap()]
+                                        .id
+                                        .clone()
+                                        .to_string()
+                                ),
                             ).await?;
                             self.screen = Screen::Table;
                             let result = App::query_whole(&self.conn).await?;
