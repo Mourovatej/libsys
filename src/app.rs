@@ -578,8 +578,10 @@ impl App<'_> {
                             self.items = App::parse_result(result).await?;
                             
                         }
+                        
                         _ => {
                             self.insert_form.focused_textarea_mut().input(key);
+                            
                         }
                     },
                 },
@@ -589,71 +591,6 @@ impl App<'_> {
         Ok(())
     }
 
-    pub async fn insert_sample_data(conn: &turso::Connection) -> turso::Result<()> {
-        let books = vec![
-            (
-                "George Orwell",
-                "1984",
-                1949,
-                "dystopian,classic,fiction",
-                "",
-                "Shelf A1",
-                "9780451524935",
-                "Re-read for book club",
-            ),
-            (
-                "Harper Lee",
-                "To Kill a Mockingbird",
-                1960,
-                "classic,fiction,drama",
-                "",
-                "Shelf A1",
-                "9780061120084",
-                "",
-            ),
-            (
-                "J.R.R. Tolkien",
-                "The Hobbit",
-                1937,
-                "fantasy,adventure",
-                "2024-11-02",
-                "Shelf B3",
-                "9780547928227",
-                "Lent to Sam",
-            ),
-            (
-                "Frank Herbert",
-                "Dune",
-                1965,
-                "sci-fi,classic",
-                "",
-                "Shelf B1",
-                "9780441172719",
-                "",
-            ),
-            (
-                "Mary Shelley",
-                "Frankenstein",
-                1818,
-                "gothic,classic,horror",
-                "",
-                "Shelf A2",
-                "9780486282114",
-                "",
-            ),
-        ];
-
-        for (author, title, year, tags, return_date, location, isbn, notes) in books {
-            conn.execute(
-            r#"INSERT INTO library (author, title, publication_year, tags, return_date, location, isbn, notes)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"#,
-            (author, title, year, tags, return_date, location, isbn, notes),
-        )
-        .await?;
-        }
-
-        Ok(())
-    }
     pub async fn query_whole(conn: &turso::Connection) -> turso::Result<turso::Rows> {
         conn.query("SELECT * FROM library", ()).await
     }
